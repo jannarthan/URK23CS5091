@@ -1,0 +1,63 @@
+CREATE DATABASE APPOINMENT;
+USE APPOINMENT;
+CREATE TABLE users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50),
+    password VARCHAR(50),
+    email VARCHAR(100),
+    role ENUM('patient', 'doctor')
+);
+
+CREATE TABLE appointments (
+    appointment_id INT AUTO_INCREMENT PRIMARY KEY,
+    doctor_id INT,
+    doctor_name VARCHAR(100),
+    specialty VARCHAR(100),
+    appointment_date DATE,
+    appointment_time TIME,
+    FOREIGN KEY (doctor_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE bookings (
+    booking_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT,
+    appointment_id INT,
+    FOREIGN KEY (patient_id) REFERENCES users(user_id),
+    FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id)
+);
+CREATE TABLE symptom_specialty_map (
+    symptom VARCHAR(100),
+    specialty VARCHAR(100)
+);
+INSERT INTO symptom_specialty_map (symptom, specialty) VALUES
+('chest pain', 'cardiologist'),
+('skin rash', 'dermatologist'),
+('fever', 'general physician'),
+('headache', 'neurologist'),
+('eye irritation', 'ophthalmologist');
+
+
+INSERT INTO users (user_id, username, role) VALUES
+(101, 'Dr. Meena Joshi', 'doctor'),
+(102, 'Dr. Arun Patel', 'doctor'),
+(103, 'Dr. Sneha Reddy', 'doctor'),
+(104, 'Dr. Nikhil Sharma', 'doctor'),
+(105, 'Dr. Priya Verma', 'doctor'),
+(106, 'Dr. Anil Raj', 'doctor'),
+(107, 'Dr. Kavita Nair', 'doctor'),
+(108, 'Dr. Farhan Siddiqui', 'doctor'),
+(109, 'Dr. Ritu Kapoor', 'doctor');
+INSERT INTO appointments (doctor_id, doctor_name, specialty, appointment_date, appointment_time) VALUES
+(101, 'Dr. Meena Joshi', 'cough, asthma, bronchitis', '2025-04-29', '11:30'),
+(102, 'Dr. Arun Patel', 'headache, migraine, dizziness', '2025-04-30', '09:45'),
+(103, 'Dr. Sneha Reddy', 'stomach pain, indigestion, food poisoning', '2025-05-01', '14:00'),
+(104, 'Dr. Nikhil Sharma', 'skin rash, allergy, eczema', '2025-05-01', '13:30'),
+(105, 'Dr. Priya Verma', 'back pain, joint pain, arthritis', '2025-05-02', '15:00'),
+(106, 'Dr. Anil Raj', 'eye pain, blurry vision, red eyes', '2025-05-03', '10:15'),
+(107, 'Dr. Kavita Nair', 'toothache, gum bleeding, dental issues', '2025-05-04', '16:30'),
+(108, 'Dr. Farhan Siddiqui', 'chest pain, shortness of breath, hypertension', '2025-05-05', '12:00'),
+(109, 'Dr. Ritu Kapoor', 'diabetes, high blood sugar, insulin issues', '2025-05-06', '09:00');
+
+
+
+
