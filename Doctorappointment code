@@ -1,0 +1,314 @@
+package appoinment;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+import java.util.*;
+
+public class DoctorApp extends JFrame {
+
+    JTextField usernameField, emailField;
+    JComboBox<String> roleBox;
+    JPasswordField passwordField;
+    JTextField loginUsernameField, symptomField;
+    JPasswordField loginPasswordField;
+
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/APPOINMENT";
+    private static final String DB_USER = "root";
+    private static final String DB_PASS = "08042006";
+
+    public DoctorApp() {
+        setTitle("Doctor Appointment Booking System");
+        setSize(400, 300);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.add("Register", registerPanel());
+        tabs.add("Login", loginPanel());
+
+        add(tabs);
+        setVisible(true);
+    }
+
+    private JPanel registerPanel() {
+        JPanel panel = new JPanel(new GridLayout(5, 2));
+
+        usernameField = new JTextField();
+        passwordField = new JPasswordField();
+        emailField = new JTextField();
+        roleBox = new JComboBox<>(new String[]{"patient", "doctor"});
+
+        panel.add(new JLabel("Username:"));
+        panel.add(usernameField);
+        panel.add(new JLabel("Password:"));
+        panel.add(passwordField);
+        panel.add(new JLabel("Email:"));
+        panel.add(emailField);
+        panel.add(new JLabel("Role:"));
+        panel.add(roleBox);
+
+        JButton registerBtn = new JButton("Register");
+        registerBtn.addActionListener(e -> registerUser());
+        panel.add(registerBtn);
+
+        return panel;
+    }
+
+    private JPanel loginPanel() {
+        JPanel panel = new JPanel(new GridLayout(4, 2));
+
+        loginUsernameField = new JTextField();
+        loginPasswordField = new JPasswordField();
+        symptomField = new JTextField();
+
+        panel.add(new JLabel("Username:"));
+        panel.add(loginUsernameField);
+        panel.add(new JLabel("Password:"));
+        panel.add(loginPasswordField);
+        panel.add(new JLabel("Symptoms (for patients):"));
+        panel.add(symptomField);
+
+        JButton loginBtn = new JButton("Login");
+        loginBtn.addActionListener(e -> loginUser());
+        panel.add(loginBtn);
+
+        return panel;
+    }
+
+    private void registerUser() {
+        String username = usernameField.getText().trim();
+        String password = new String(passwordField.getPassword()).trim();
+        String email = emailField.getText().trim();
+        String role = roleBox.getSelectedItem().toString().toLowerCase();
+
+        if (username.isEmpty() || password.isEmpty() || email.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "All fields are required.");
+            return;
+        }
+
+        try (Connection conn = getConnection()) {
+            String sql = "INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, username);
+            stmt.setString(2, password);
+            stmt.setString(3, email);
+            stmt.setString(4, role);
+
+            int rows = stmt.executeUpdate();
+            JOptionPane.showMessageDialog(this, rows > 0 ? "Registered successfully!" : "Registration failed.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Registration error: " + e.getMessage());
+        }
+    }
+
+    private void loginUser() {
+        String username = loginUsernameField.getText().trim();
+        String password = new String(loginPasswordField.getPassword()).trim();
+        String symptom = symptomField.getText().trim().toLowerCase();
+
+        try (Connection conn = getConnection()) {
+            String sql = "SELECT * FROM users WHERE username = ? AND password = ?";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, username);
+            stmt.setString(2, password);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                String role = rs.getString("role");
+                int userId = rs.getInt("user_id");
+
+                JOptionPane.showMessageDialog(this, "Login successful as " + role + "!");
+                if (role.equals("patient")) {
+                    if (!symptom.isEmpty()) {
+                        suggestDoctorsBasedOnSymptoms(userId, symptom);
+                    } else {
+                        showAvailableAppointments(userId);
+                    }
+                } else if (role.equals("doctor")) {
+                    showAppointmentSlotForm(userId);
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid login!");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void suggestDoctorsBasedOnSymptoms(int patientId, String symptom) {
+        JFrame frame = new JFrame("Suggested Doctors for Symptom: " + symptom);
+        frame.setSize(500, 500);
+        frame.setLayout(new BorderLayout());
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JScrollPane scrollPane = new JScrollPane(panel);
+        frame.add(scrollPane, BorderLayout.CENTER);
+
+        try (Connection conn = getConnection()) {
+            String sql = "SELECT * FROM appointments WHERE specialty LIKE ?";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, "%" + symptom + "%");
+            ResultSet rs = stmt.executeQuery();
+
+            boolean found = false;
+            while (rs.next()) {
+                found = true;
+                int apptId = rs.getInt("appointment_id");
+                String doctor = rs.getString("doctor_name");
+                String specialty = rs.getString("specialty");
+                String date = rs.getString("appointment_date");
+                String time = rs.getString("appointment_time");
+
+                JPanel single = new JPanel(new GridLayout(0, 1));
+                single.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+                single.add(new JLabel("Doctor: " + doctor));
+                single.add(new JLabel("Specialty: " + specialty));
+                single.add(new JLabel("Date: " + date));
+                single.add(new JLabel("Time: " + time));
+
+                JButton bookBtn = new JButton("Book Appointment");
+                bookBtn.addActionListener(e -> bookAppointment(patientId, apptId));
+                single.add(bookBtn);
+
+                panel.add(single);
+            }
+
+            if (!found) {
+                panel.add(new JLabel("No doctors found for symptom: " + symptom));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        frame.setVisible(true);
+    }
+
+    private void showAvailableAppointments(int patientId) {
+        JFrame frame = new JFrame("Available Appointments");
+        frame.setSize(500, 500);
+        frame.setLayout(new BorderLayout());
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JScrollPane scrollPane = new JScrollPane(panel);
+        frame.add(scrollPane, BorderLayout.CENTER);
+
+        try (Connection conn = getConnection()) {
+            String sql = "SELECT a.* FROM appointments a LEFT JOIN bookings b ON a.appointment_id = b.appointment_id WHERE b.appointment_id IS NULL";
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+
+            while (rs.next()) {
+                int apptId = rs.getInt("appointment_id");
+                String doctor = rs.getString("doctor_name");
+                String specialty = rs.getString("specialty");
+                String date = rs.getString("appointment_date");
+                String time = rs.getString("appointment_time");
+
+                JPanel single = new JPanel(new GridLayout(0, 1));
+                single.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+                single.add(new JLabel("Doctor: " + doctor));
+                single.add(new JLabel("Specialty: " + specialty));
+                single.add(new JLabel("Date: " + date));
+                single.add(new JLabel("Time: " + time));
+
+                JButton bookBtn = new JButton("Book Appointment");
+                bookBtn.addActionListener(e -> bookAppointment(patientId, apptId));
+                single.add(bookBtn);
+
+                panel.add(single);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        frame.setVisible(true);
+    }
+
+    private void bookAppointment(int patientId, int appointmentId) {
+        try (Connection conn = getConnection()) {
+            String sql = "INSERT INTO bookings (patient_id, appointment_id) VALUES (?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, patientId);
+            stmt.setInt(2, appointmentId);
+            stmt.executeUpdate();
+
+            JOptionPane.showMessageDialog(this, "Appointment booked!");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Booking failed.");
+        }
+    }
+
+    private void showAppointmentSlotForm(int doctorId) {
+        JFrame frame = new JFrame("Add Appointment Slot");
+        frame.setSize(400, 300);
+        JPanel panel = new JPanel(new GridLayout(5, 2));
+
+        JTextField specialtyField = new JTextField();
+        JTextField dateField = new JTextField();
+        JTextField timeField = new JTextField();
+
+        String doctorName = "";
+        try (Connection conn = getConnection()) {
+            PreparedStatement stmt = conn.prepareStatement("SELECT username FROM users WHERE user_id = ?");
+            stmt.setInt(1, doctorId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                doctorName = rs.getString("username");
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+
+        panel.add(new JLabel("Doctor Name:"));
+        panel.add(new JLabel(doctorName));
+        panel.add(new JLabel("Specialty:")); panel.add(specialtyField);
+        panel.add(new JLabel("Date (YYYY-MM-DD):")); panel.add(dateField);
+        panel.add(new JLabel("Time (HH:MM):")); panel.add(timeField);
+
+        JButton addBtn = new JButton("Add Slot");
+        String finalDoctorName = doctorName;
+
+        addBtn.addActionListener(e -> {
+            try (Connection conn = getConnection()) {
+                String sql = "INSERT INTO appointments (doctor_id, doctor_name, specialty, appointment_date, appointment_time) VALUES (?, ?, ?, ?, ?)";
+                PreparedStatement stmt = conn.prepareStatement(sql);
+                stmt.setInt(1, doctorId);
+                stmt.setString(2, finalDoctorName);
+                stmt.setString(3, specialtyField.getText().trim());
+                stmt.setString(4, dateField.getText().trim());
+                stmt.setString(5, timeField.getText().trim());
+
+                int rows = stmt.executeUpdate();
+                JOptionPane.showMessageDialog(frame, rows > 0 ? "Slot added!" : "Failed to add.");
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(frame, "Database error: " + ex.getMessage());
+            }
+        });
+
+        panel.add(addBtn);
+        frame.add(panel);
+        frame.setVisible(true);
+    }
+
+    private Connection getConnection() throws SQLException {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            return DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("Driver not found");
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(DoctorApp::new);
+    }
+}
